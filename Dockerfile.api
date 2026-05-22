@@ -1,0 +1,16 @@
+# Derived image that adds a FastAPI wrapper on top of the base Scrapling image.
+# Build the base image first:
+#   docker build -t scrapling:local .
+# Then build this one:
+#   docker build -t scrapling-api:local -f Dockerfile.api .
+FROM scrapling:local
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system fastapi 'uvicorn[standard]'
+
+COPY scraper_api.py /app/scraper_api.py
+
+EXPOSE 8001
+
+ENTRYPOINT []
+CMD ["uvicorn", "scraper_api:app", "--host", "0.0.0.0", "--port", "8001"]

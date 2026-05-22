@@ -1,0 +1,13 @@
+services:
+  scrapling-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: scrapling-api:local
+    container_name: scrapling-api
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    shm_size: "1gb"  # Chromium needs a roomy /dev/shm
