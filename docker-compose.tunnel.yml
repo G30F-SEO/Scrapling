@@ -1,0 +1,28 @@
+# Cloudflare Tunnel sidecar — exposes scrapling-api over a public HTTPS URL
+# without opening any port on your machine.
+#
+# Quickstart (random *.trycloudflare.com URL, no Cloudflare account needed):
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d
+#   docker compose logs cloudflared | grep -i trycloudflare
+#
+# The printed URL is what you paste into the HTTP Request node of n8n.cloud
+# or into your webapp backend config. Don't forget to set SCRAPLING_API_KEY
+# in a .env file or your shell before starting — once the API is on the
+# public internet, anyone with the URL can hit it.
+#
+# For a stable URL on your own domain, see:
+# https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+
+services:
+  # Lock the API to internal docker network only — the tunnel reaches it
+  # by service name, no host port needed.
+  scrapling-api:
+    ports: !reset []
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: scrapling-cloudflared
+    command: tunnel --no-autoupdate --url http://scrapling-api:8001
+    depends_on:
+      - scrapling-api
+    restart: unless-stopped

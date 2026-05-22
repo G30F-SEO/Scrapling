@@ -2,19 +2,53 @@
 
 POST /scrape with JSON body to extract a URL as HTML / Markdown / text.
 Designed to be a drop-in self-hosted replacement for paid scraping APIs.
+
+Environment variables
+---------------------
+SCRAPLING_API_KEY   If set, every request to /scrape must carry the same
+                    value in the `X-API-Key` header. Strongly recommended
+                    whenever the service is reachable from anything other
+                    than localhost.
+SCRAPLING_CORS      Comma-separated list of allowed origins for CORS.
+                    Use "*" to allow any origin. Leave unset to disable
+                    CORS entirely (default).
 """
 
+import os
 from typing import Literal, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from scrapling.core.shell import Convertor
 from scrapling.fetchers import DynamicFetcher, Fetcher, StealthyFetcher
 
-app = FastAPI(title="Scrapling local API", version="1.0.0")
+API_KEY = os.environ.get("SCRAPLING_API_KEY", "").strip()
+CORS_ORIGINS = [o.strip() for o in os.environ.get("SCRAPLING_CORS", "").split(",") if o.strip()]
+
+app = FastAPI(title="Scrapling local API", version="1.1.0")
+
+if CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ORIGINS,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+        allow_credentials=False,
+    )
 
 _FORMAT_MAP = {"md": "markdown", "html": "html", "text": "text"}
+
+
+def require_api_key(x_api_key: Optional[str] = Header(default=None)) -> None:
+    if not API_KEY:
+        return
+    if x_api_key != API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing X-API-Key",
+        )
 
 
 class ScrapeRequest(BaseModel):
@@ -55,7 +89,7 @@ class ScrapeResponse(BaseModel):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "auth_required": bool(API_KEY)}
 
 
 def _fetch(req: ScrapeRequest):
@@ -79,7 +113,7 @@ def _fetch(req: ScrapeRequest):
     return StealthyFetcher.fetch(req.url, **browser_kwargs)
 
 
-@app.post("/scrape", response_model=ScrapeResponse)
+@app.post("/scrape", response_model=ScrapeResponse, dependencies=[Depends(require_api_key)])
 def scrape(req: ScrapeRequest) -> ScrapeResponse:
     try:
         response = _fetch(req)
